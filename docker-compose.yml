@@ -1,0 +1,30 @@
+version: "3.8"
+
+services:
+  chatapp:
+    container_name: gochat
+    image: gochatapp
+    build: .
+    ports:
+      - "8080:8080"
+
+  mongo:
+    image: mongo
+    restart: always
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: password
+  
+  db-client:
+    image: mongo-express
+    restart: always
+    ports:
+      - "8081:8081"
+    environment:
+      - ME_CONFIG_MONGODB_ADMINUSERNAME=root
+      - ME_CONFIG_MONGODB_ADMINPASSWORD=password
+      - ME_CONFIG_MONGODB_URL=mongodb://root:password@db:27017/
+    depends_on:
+      - mongo
