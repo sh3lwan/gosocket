@@ -1,18 +1,13 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 var clients = make(map[string]Client)
@@ -26,99 +21,102 @@ var upgrader = websocket.Upgrader{
 
 func main() {
 	// Handle client messages
-	go func() {
-		for {
-			sender := <-broadcast
-
-			fmt.Printf("client count: %d\n", len(clients))
-
-			for _, client := range clients {
-				conn := client.Conn
-
-				message, err := json.Marshal(ReceivedMessage{
-					Id:      sender.Id,
-					Message: sender.Message,
-					IsNew:   sender.IsNew,
-				})
-
-				getMessagesCollection().InsertOne(context.Background(), message)
-
-				if err != nil {
-					log.Printf("Error writing message: %v", err)
-				}
-
-				err = conn.WriteMessage(websocket.TextMessage, message)
-
-				fmt.Printf("message sent: %s %s\n", client.Id, message)
-
-				if err != nil {
-					log.Printf("Error writing message: %v", err)
-				}
-
-			}
-		}
-
-	}()
+	go receive()
 
 	http.HandleFunc("/", wsHandler)
 
-	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("Works"))
-	})
-
-	http.HandleFunc("/api/connect", func(w http.ResponseWriter, r *http.Request) {
-		enableCors(&w)
-
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			fmt.Printf("something went wrong: %v", err.Error())
-		}
-		var authBody AuthBody
-		err = json.Unmarshal(body, &authBody)
-		if err != nil {
-			fmt.Printf("something went wrong: %v", err.Error())
-		}
-
-		messages := getMessages()
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(Response{
-			StatusCode: http.StatusOK,
-			Data: map[string]any{
-				"messages": messages,
-			},
-		})
-
-	})
+	http.HandleFunc("/api/connect", handleConnect)
 
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
-type Response struct {
-	StatusCode int16 `json:"status_code"`
-	Data       map[string]any
-}
-type AuthBody struct {
-	Username string `json:"username"`
+func receive() {
+	for {
+		message := <-broadcast
+
+		recevied := ReceivedMessage{
+			Id:       message.Id,
+			Message:  message.Message,
+			IsNew:    message.IsNew,
+			Username: clients[message.Id].Username,
+		}
+
+        fmt.Printf("received message %v\n", recevied)
+		if first := checkfirst(recevied); first != nil {
+			recevied = *first
+
+
+		}
+
+		sendToClients(recevied)
+	}
+
 }
 
-func enableCors(w *http.ResponseWriter) {
-	(*w).Header().Set("Access-Control-Allow-Origin", "*")
-	(*w).Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE")
-	(*w).Header().Set("Access-Control-Allow-Headers", "Content-Type, Access-Control-Allow-Headers, Authorization, X-Requested-With")
+func checkfirst(message ReceivedMessage) *ReceivedMessage {
+
+	var firstMessage ReceivedMessage
+
+	err := json.Unmarshal([]byte(message.Message), &firstMessage)
+
+	if err != nil || !firstMessage.IsNew {
+		return nil
+	}
+
+	id := message.Id
+	client := clients[id]
+	client.Username = firstMessage.Username
+	clients[id] = client
+
+	return &ReceivedMessage{
+		Id:       client.Id,
+		Message:  "Connection established!",
+		IsNew:    true,
+		Username: client.Username,
+	}
+
 }
 
-type Client struct {
-	Id string
-	*websocket.Conn
+func sendToClients(received ReceivedMessage) {
+	for _, client := range clients {
+		conn := client.Conn
+
+		id, err := insertMessage(received)
+
+		if err != nil {
+			log.Printf("Error writing message: %v\n", err)
+			return
+		}
+
+		received.Id = fmt.Sprint(id)
+
+		message, err := json.Marshal(received)
+
+		if err != nil {
+			log.Printf("Error writing message: %v\n", err)
+			return
+		}
+
+		err = conn.WriteMessage(websocket.TextMessage, message)
+
+		if err != nil {
+			log.Printf("Error writing message: %v\n", err)
+			return
+		}
+	}
 }
 
-type ReceivedMessage struct {
-	Id       string `json:"id"`
-	Message  string `json:"message"`
-	Username string `json:"username"`
-	IsNew    bool   `json:"is_new"`
+func handleConnect(w http.ResponseWriter, r *http.Request) {
+	enableCors(&w)
+
+	w.WriteHeader(http.StatusOK)
+	w.Header().Set("Content-Type", "application/json")
+
+	json.NewEncoder(w).Encode(map[string]any{
+		"status":   http.StatusOK,
+		"messages": getMessages(),
+	})
+
 }
 
 func wsHandler(w http.ResponseWriter, r *http.Request) {
@@ -143,19 +141,10 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 
 	clients[uuid] = *client
 
-	fmt.Printf("new connection established: %s\n", uuid)
-
-	fmt.Printf("clients count: %d\n", len(clients))
-
-	go handleMessages(client)
+	go initClient(client)
 }
 
-func handleMessages(client *Client) {
-	broadcast <- &ReceivedMessage{
-		Id:      client.Id,
-		Message: "Connection established",
-		IsNew:   true,
-	}
+func initClient(client *Client) {
 
 	for {
 		_, message, err := client.Conn.ReadMessage()
@@ -165,71 +154,15 @@ func handleMessages(client *Client) {
 			break
 		}
 
+		fmt.Printf("Message Received: %v", message)
+
 		broadcast <- &ReceivedMessage{
 			Id:      client.Id,
 			Message: string(message),
 		}
 	}
 
-	fmt.Printf("Connection Closed: %s\n", client.Id)
-
 	client.Conn.Close()
 
 	delete(clients, client.Id)
-}
-
-func getDB() *mongo.Client {
-	// Set client options
-	clientOptions := options.Client().ApplyURI("mongodb://root:password@localhost:27017")
-	// Connect to MongoDB
-	client, err := mongo.Connect(context.Background(), clientOptions)
-	if err != nil {
-		fmt.Printf(err.Error())
-	}
-
-	// Check the connection
-	err = client.Ping(context.Background(), nil)
-	if err != nil {
-		fmt.Printf(err.Error())
-	}
-
-	return client
-}
-
-func getMessagesCollection() *mongo.Collection {
-	client := getDB()
-
-	collection := client.Database("chat").Collection("messages")
-
-	return collection
-}
-
-func getMessages() []ReceivedMessage {
-	filter := bson.M{}
-
-	options := options.Find()
-
-	cursor, err := getMessagesCollection().Find(context.Background(), filter, options)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer cursor.Close(context.Background())
-
-	var messages []ReceivedMessage
-
-	// Iterate over the cursor and process each document
-	for cursor.Next(context.Background()) {
-		var message ReceivedMessage
-		if err := cursor.Decode(&message); err != nil {
-			log.Fatal(err)
-		}
-		// Process the message document
-		log.Println(message)
-		messages = append(messages, message)
-	}
-	if err := cursor.Err(); err != nil {
-		log.Fatal(err)
-	}
-
-	return messages
 }
