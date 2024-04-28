@@ -1,30 +1,48 @@
 version: "3.8"
 
 services:
-  chatapp:
-    container_name: gochat
-    image: gochatapp
-    build: .
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
     ports:
       - "8080:8080"
+    #restart: unless-stopped
+    depends_on: 
+      - mysql_db
+    environment:
+      DB_HOST: mysql_db
+      DB_PORT: 3306
+      DB_USERNAME: root
+      DB_PASSWORD: password
+    networks:
+      - backend
 
-  mongo:
-    image: mongo
+  mysql_db:
+    image: mysql
     restart: always
     ports:
-      - "27017:27017"
+      - "3306:3306"
+    volumes:
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
     environment:
-      MONGO_INITDB_ROOT_USERNAME: root
-      MONGO_INITDB_ROOT_PASSWORD: password
-  
-  db-client:
-    image: mongo-express
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_ALLOW_EMPTY_PASSWORD: false
+    networks:
+      - backend
+
+  phpmyadmin:
+    image: phpmyadmin
     restart: always
     ports:
-      - "8081:8081"
-    environment:
-      - ME_CONFIG_MONGODB_ADMINUSERNAME=root
-      - ME_CONFIG_MONGODB_ADMINPASSWORD=password
-      - ME_CONFIG_MONGODB_URL=mongodb://root:password@db:27017/
+      - 3000:80
     depends_on:
-      - mongo
+      - mysql_db
+    environment:
+      - PMA_ARBITRARY=1
+    networks:
+      - backend
+
+networks:
+  backend:
+    driver: bridge

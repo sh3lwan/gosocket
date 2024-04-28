@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -9,6 +10,9 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/golang-migrate/migrate/v4"
+	"github.com/golang-migrate/migrate/v4/database/mysql"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/joho/godotenv"
 )
 
@@ -31,20 +35,11 @@ func getEnv(key string) string {
 }
 
 func Init() {
-	err := godotenv.Load()
+	conn, err := sql.Open("mysql", "root:password@tcp(mysql_db:3306)/chat")
 
 	if err != nil {
-		log.Fatal(err.Error())
-	}
-
-	username := getEnv("DB_USERNAME")
-	password := getEnv("DB_PASSWORD")
-	databse := getEnv("DB_DATABASE")
-
-	conn, err := sql.Open("mysql", fmt.Sprintf("%s:%s@/%s", username, password, databse))
-
-	if err != nil {
-		panic(err.Error())
+        fmt.Printf("Error creating connection: %v\n", err)
+		return
 	}
 
 	// See "Important settings" section.
@@ -54,17 +49,47 @@ func Init() {
 	DBConnection = conn
 }
 
-func Close() {
-	err := DBConnection.Close()
-	if err != nil {
-		panic(err)
-	}
-}
-
 func DB() *sql.DB {
 	if DBConnection == nil {
 		Init()
 	}
 
 	return DBConnection
+}
+
+func Migrate() error {
+	driver, err := mysql.WithInstance(DB(), &mysql.Config{})
+
+	if err != nil {
+		fmt.Printf("Error creating migrations: %v\n", err)
+		return err
+	}
+
+	m, err := migrate.NewWithDatabaseInstance(
+		"file://database/migrations/",
+		"mysql", driver)
+
+	if err != nil {
+		fmt.Printf("Error : %v\n", err)
+		return err
+	}
+
+	return m.Steps(1)
+}
+
+func WriteJSON(w http.ResponseWriter, statusCode int, data map[string]any) {
+
+	w.Header().Set("Content-Type", "application/json")
+
+	response, err := json.Marshal(Response{
+		StatusCode: int16(statusCode),
+		Data:       data,
+	})
+
+	if err != nil {
+		fmt.Printf("Error marsheling: %v", err)
+		return
+	}
+
+	w.Write(response)
 }

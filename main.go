@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
@@ -20,12 +21,14 @@ var upgrader = websocket.Upgrader{
 }
 
 func main() {
+    fmt.Println("Started server...")
+	// Migrate databse
+
 	// Handle client messages
 	go receive()
 
-	http.HandleFunc("/", wsHandler)
-
-	http.HandleFunc("/api/connect", handleConnect)
+	http.HandleFunc("/ws", wsHandler)
+	http.HandleFunc("GET /api/connect", handleConnect)
 
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
@@ -36,17 +39,23 @@ func receive() {
 
 		recevied := ReceivedMessage{
 			Id:       message.Id,
-			Message:  message.Message,
+			Body:     message.Body,
 			IsNew:    message.IsNew,
 			Username: clients[message.Id].Username,
 		}
 
-        fmt.Printf("received message %v\n", recevied)
 		if first := checkfirst(recevied); first != nil {
 			recevied = *first
-
-
 		}
+
+		id, err := insertMessage(recevied)
+
+		if err != nil {
+			fmt.Printf("Error inserting message: %v\n", err)
+			return
+		}
+
+		recevied.Id = fmt.Sprint(id)
 
 		sendToClients(recevied)
 	}
@@ -57,7 +66,7 @@ func checkfirst(message ReceivedMessage) *ReceivedMessage {
 
 	var firstMessage ReceivedMessage
 
-	err := json.Unmarshal([]byte(message.Message), &firstMessage)
+	err := json.Unmarshal([]byte(message.Body), &firstMessage)
 
 	if err != nil || !firstMessage.IsNew {
 		return nil
@@ -70,7 +79,7 @@ func checkfirst(message ReceivedMessage) *ReceivedMessage {
 
 	return &ReceivedMessage{
 		Id:       client.Id,
-		Message:  "Connection established!",
+		Body:     "Connection established!",
 		IsNew:    true,
 		Username: client.Username,
 	}
@@ -80,15 +89,6 @@ func checkfirst(message ReceivedMessage) *ReceivedMessage {
 func sendToClients(received ReceivedMessage) {
 	for _, client := range clients {
 		conn := client.Conn
-
-		id, err := insertMessage(received)
-
-		if err != nil {
-			log.Printf("Error writing message: %v\n", err)
-			return
-		}
-
-		received.Id = fmt.Sprint(id)
 
 		message, err := json.Marshal(received)
 
@@ -109,14 +109,22 @@ func sendToClients(received ReceivedMessage) {
 func handleConnect(w http.ResponseWriter, r *http.Request) {
 	enableCors(&w)
 
-	w.WriteHeader(http.StatusOK)
-	w.Header().Set("Content-Type", "application/json")
+	messages, err := getMessages()
 
-	json.NewEncoder(w).Encode(map[string]any{
-		"status":   http.StatusOK,
-		"messages": getMessages(),
-	})
+    fmt.Printf("Messages: %v", messages)
 
+	if err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	WriteJSON(
+		w,
+		http.StatusOK,
+		map[string]any{
+			"messages": messages,
+		},
+	)
 }
 
 func wsHandler(w http.ResponseWriter, r *http.Request) {
@@ -154,11 +162,9 @@ func initClient(client *Client) {
 			break
 		}
 
-		fmt.Printf("Message Received: %v", message)
-
 		broadcast <- &ReceivedMessage{
-			Id:      client.Id,
-			Message: string(message),
+			Id:   client.Id,
+			Body: string(message),
 		}
 	}
 

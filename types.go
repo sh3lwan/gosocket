@@ -9,6 +9,7 @@ type Response struct {
 
 type AuthBody struct {
 	Username string `json:"username"`
+    Password string `json:"password"`
 }
 
 type Client struct {
@@ -19,7 +20,7 @@ type Client struct {
 
 type ReceivedMessage struct {
 	Id       string `json:"id"`
-	Message  string `json:"message"`
+	Body string `json:"body"`
 	Username string `json:"username"`
 	IsNew    bool   `json:"is_new"`
 }
