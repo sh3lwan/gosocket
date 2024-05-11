@@ -9,6 +9,9 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
+	"github.com/sh3lwan/gosocket/config"
+	"github.com/sh3lwan/gosocket/repositories"
+	. "github.com/sh3lwan/gosocket/types"
 )
 
 var clients = make(map[string]Client)
@@ -20,74 +23,94 @@ var upgrader = websocket.Upgrader{
 	WriteBufferSize: 1024,
 }
 
+var p *repositories.Producer
+
 func main() {
-    fmt.Println("Started server...")
-	// Migrate databse
+	p = repositories.NewProducer()
+	// Handle sent client messages
+	go send()
 
-	// Handle client messages
-	go receive()
-
+	//handle routes
 	http.HandleFunc("/ws", wsHandler)
 	http.HandleFunc("GET /api/connect", handleConnect)
 
+	// start server
+	fmt.Println("Started server...")
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
-func receive() {
+func receive(client *Client) {
+
 	for {
-		message := <-broadcast
+		_, message, err := client.Conn.ReadMessage()
 
-		recevied := ReceivedMessage{
-			Id:       message.Id,
-			Body:     message.Body,
-			IsNew:    message.IsNew,
-			Username: clients[message.Id].Username,
+		if err != nil {
+			log.Println("Error reading message:\n", err)
+			break
 		}
 
-		if first := checkfirst(recevied); first != nil {
-			recevied = *first
+		receivedMessage := ReceivedMessage{
+			Id: client.Id,
 		}
 
-		id, err := insertMessage(recevied)
+		err = json.Unmarshal(message, &receivedMessage)
+
+		if err != nil {
+			log.Println("Error unmarshing message:\n", err)
+			continue
+		}
+
+		fmt.Printf("received message: %v\n", receivedMessage)
+
+		// set client's username from first message
+		if client.Username == "" && receivedMessage.Username != "" {
+			receivedMessage.Body = " joined chat!"
+			client.Username = receivedMessage.Username
+			clients[client.Id] = *client
+		}
+
+		broadcast <- &receivedMessage
+	}
+
+	client.Conn.Close()
+
+	delete(clients, client.Id)
+}
+
+func send() {
+	for {
+		received := <-broadcast
+
+		if received.Username == "" {
+			received.Username = clients[received.Id].Username
+		}
+
+		id, err := repositories.InsertMessage(*received)
 
 		if err != nil {
 			fmt.Printf("Error inserting message: %v\n", err)
 			return
 		}
 
-		recevied.Id = fmt.Sprint(id)
+		p.WriteNotification(*received)
 
-		sendToClients(recevied)
-	}
+		received.Id = fmt.Sprint(id)
 
-}
-
-func checkfirst(message ReceivedMessage) *ReceivedMessage {
-
-	var firstMessage ReceivedMessage
-
-	err := json.Unmarshal([]byte(message.Body), &firstMessage)
-
-	if err != nil || !firstMessage.IsNew {
-		return nil
-	}
-
-	id := message.Id
-	client := clients[id]
-	client.Username = firstMessage.Username
-	clients[id] = client
-
-	return &ReceivedMessage{
-		Id:       client.Id,
-		Body:     "Connection established!",
-		IsNew:    true,
-		Username: client.Username,
+		sendToClients(*received)
 	}
 
 }
 
 func sendToClients(received ReceivedMessage) {
+
 	for _, client := range clients {
+
+		if received.Receiver != "" {
+			if received.Username != client.Username && received.Receiver != client.Username {
+				continue
+			}
+		}
+
 		conn := client.Conn
 
 		message, err := json.Marshal(received)
@@ -107,22 +130,23 @@ func sendToClients(received ReceivedMessage) {
 }
 
 func handleConnect(w http.ResponseWriter, r *http.Request) {
-	enableCors(&w)
+	config.EnableCors(&w)
 
-	messages, err := getMessages()
+	receiver := r.URL.Query().Get("receiver")
 
-    fmt.Printf("Messages: %v", messages)
+	messages, err := repositories.GetMessages(receiver)
 
 	if err != nil {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
 
-	WriteJSON(
+	config.WriteJSON(
 		w,
 		http.StatusOK,
 		map[string]any{
 			"messages": messages,
+			"receiver": receiver,
 		},
 	)
 }
@@ -149,26 +173,5 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 
 	clients[uuid] = *client
 
-	go initClient(client)
-}
-
-func initClient(client *Client) {
-
-	for {
-		_, message, err := client.Conn.ReadMessage()
-
-		if err != nil {
-			log.Println("Error reading message:\n", err)
-			break
-		}
-
-		broadcast <- &ReceivedMessage{
-			Id:   client.Id,
-			Body: string(message),
-		}
-	}
-
-	client.Conn.Close()
-
-	delete(clients, client.Id)
+	go receive(client)
 }

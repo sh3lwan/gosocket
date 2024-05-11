@@ -8,7 +8,7 @@ done
 
 # Run database migrations
 echo "Running database migrations..."
-make migrate-up
+make up
 
 # Start the Go application
 echo "Starting the Go application..."
