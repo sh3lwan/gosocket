@@ -14,7 +14,7 @@ func GetMessages(receiver string) ([]ReceivedMessage, error) {
 	var err error
 
 	if receiver == "" {
-		rows, err = DB().Query("SELECT id, message, username, is_new FROM messages WHERE receiver == '' OR receiver IS NULL;")
+		rows, err = DB().Query("SELECT id, message, username, is_new FROM messages WHERE receiver = '' OR receiver IS NULL;")
 	} else {
 		rows, err = DB().Query("SELECT id, message, username, is_new FROM messages WHERE receiver IS NOT NULL AND receiver <> '' AND (receiver = ? OR username = ?);", receiver, receiver)
 	}
