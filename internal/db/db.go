@@ -8,11 +8,13 @@ import (
 
 	"github.com/golang-migrate/migrate"
 	"github.com/golang-migrate/migrate/database/mysql"
+	"github.com/joho/godotenv"
 )
 
 var DBConnection *sql.DB = nil
 
 func Init() {
+	err := godotenv.Load()
 	username := os.Getenv("DB_USERNAME")
 	password := os.Getenv("DB_PASSWORD")
 	host := os.Getenv("DB_HOST")
