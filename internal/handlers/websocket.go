@@ -25,7 +25,7 @@ func SocketHandler(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 
 	if err != nil {
-		log.Printf("something went wrong %v\n", err)
+		log.Printf("something is wrong %v\n", err)
 		return
 	}
 
