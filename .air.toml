@@ -1,24 +1,7 @@
-# Config file for Air
-
-# Root directory where the project is located
-root = "."
-tmp_dir = "tmp"
-build_dir = "tmp"
-
-# Command for building the Go app
-build = "go build -o ./tmp/main ./cmd/chatapp"
-
-# Command for running the Go app
-bin = "tmp/main"
-
-# Watch these directories for changes
-[watcher]
-  include = [
-    "**/*.go",
-    "**/*.tmpl",
-    "**/*.html"
-  ]
-  exclude = [
-    "tmp",
-    "vendor"
-  ]
+# .air.toml
+[build]
+  cmd = "go build -o ./tmp/app ./cmd/chatapp/main.go"
+  bin = "./tmp/app"
+  full_bin = "APP_ENV=dev ./tmp/app"
+  include_ext = ["go", "tpl", "tmpl", "html"]
+  exclude_dir = ["tmp", "vendor"]

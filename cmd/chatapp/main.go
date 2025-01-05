@@ -19,5 +19,4 @@ func main() {
 	err := srv.Start()
 
 	log.Fatal(err.Error())
-
 }

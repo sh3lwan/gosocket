@@ -31,10 +31,10 @@ FROM builder AS development
 
 RUN go build -o ./tmp/main ./cmd/chatapp
 
-CMD [ "air" ]
+#CMD [ "air" ]
 
 ## PRODUCTION ##
-FROM builder AS production
+##FROM builder AS production
 
 # Compile Binary
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /bin/chatapp ./cmd/chatapp

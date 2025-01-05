@@ -67,7 +67,12 @@ func (c *Chat) Update(client *Client) error {
 
 func (c *Chat) Receive() {
 	for {
+
+        fmt.Println("waiting for message..")
+
 		received := <-c.broadcast
+
+        fmt.Printf("received on chat: %v\n", received)
 
 		if received.Username == "" {
 			client, err := c.Get(received.Id)

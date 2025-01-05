@@ -7,12 +7,16 @@ import (
 )
 
 func HandleConnect(w http.ResponseWriter, r *http.Request) {
+	EnableCors(&w)
+
 	receiver := r.URL.Query().Get("receiver")
 
 	messages, err := GetMessages(receiver)
 
 	if err != nil {
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		WriteJSON(w, http.StatusInternalServerError, map[string]any{
+            "error": err.Error(),
+        })
 		return
 	}
 

@@ -28,16 +28,22 @@ type Server struct {
 }
 
 func Get() *Server {
+    if server == nil {
+        panic("Server Not Found")
+    }
+
 	return server
 }
 
 func NewServer(port string) *Server {
 	fmt.Println("Server Created..")
 
-	return &Server{
+	server = &Server{
 		port: port,
 		Chat: NewChat(),
 	}
+    
+    return server
 }
 
 func (s *Server) Start() error {

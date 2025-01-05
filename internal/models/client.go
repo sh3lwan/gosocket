@@ -15,7 +15,7 @@ type Client struct {
 	*websocket.Conn
 }
 
-func (client *Client) Receive(chat *Chat) {
+func (client *Client) Read(chat *Chat) {
 
 	defer client.Conn.Close()
 
@@ -42,12 +42,12 @@ func (client *Client) Receive(chat *Chat) {
 
 		fmt.Printf("received message: %v\n", receivedMessage)
 
-		// set client's username from first message
-		if client.Username == "" && receivedMessage.Username != "" {
-			receivedMessage.Body = " joined chat!"
-			client.Username = receivedMessage.Username
-			chat.Update(client)
-		}
+        // set client's username from first message
+        if client.Username == "" && receivedMessage.Username != "" {
+            receivedMessage.Body = " joined chat!"
+            client.Username = receivedMessage.Username
+            chat.Update(client)
+        }
 
 		chat.broadcast <- &receivedMessage
 	}

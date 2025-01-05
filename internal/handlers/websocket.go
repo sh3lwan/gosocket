@@ -10,7 +10,6 @@ import (
 	"github.com/sh3lwan/gosocket/internal/server"
 )
 
-var s *server.Server = server.Get()
 
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
@@ -21,6 +20,8 @@ func SocketHandler(w http.ResponseWriter, r *http.Request) {
 	upgrader.CheckOrigin = func(r *http.Request) bool {
 		return true
 	}
+
+    chat := server.Get().Chat
 
 	conn, err := upgrader.Upgrade(w, r, nil)
 
@@ -34,9 +35,11 @@ func SocketHandler(w http.ResponseWriter, r *http.Request) {
 		Conn: conn,
 	}
 
-	s.Chat.Join(client)
+	chat.Join(client)
 
-	go client.Receive(s.Chat)
+    go chat.Receive()
+
+	go client.Read(chat)
 
 	w.Write([]byte("OK"))
 }

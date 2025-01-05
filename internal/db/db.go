@@ -5,25 +5,58 @@ import (
 	"fmt"
 	"os"
 	"time"
-
-	"github.com/golang-migrate/migrate"
-	"github.com/golang-migrate/migrate/database/mysql"
 	"github.com/joho/godotenv"
+    _ "github.com/go-sql-driver/mysql"
+    _ "github.com/mattn/go-sqlite3"
 )
 
 var DBConnection *sql.DB = nil
 
-func Init() {
-	err := godotenv.Load()
-	username := os.Getenv("DB_USERNAME")
-	password := os.Getenv("DB_PASSWORD")
-	host := os.Getenv("DB_HOST")
-	port := os.Getenv("DB_PORT")
-	database := os.Getenv("DB_DATABASE")
+type DBConfig struct {
+    Driver string
+    DSN string
+    TestMode bool
+}
+func init() {
+    // Load SQLite driver if in test mode
+    _ = func() error {
+        _ = "github.com/mattn/go-sqlite3" // Force import in test mode
+        return nil
+    }()
+}
 
-	fmt.Printf("%s:%s@tcp(%s:%s)/%s", username, password, host, port, database)
+func LoadConfig(testMode bool) (*DBConfig, error) {
 
-	conn, err := sql.Open("mysql", fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", username, password, host, port, database))
+    if testMode {
+        err := godotenv.Load( "../../.env.test")
+        if err != nil {
+            fmt.Printf("Error loading .env file")
+        }
+        return nil, err
+    }
+
+    err := godotenv.Load()
+
+    if err != nil {
+        fmt.Printf("Error loading .env file")
+        return nil, err
+    }
+
+    dsn := os.Getenv("DB_DSN")
+
+    if dsn == "" {
+        dsn = fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true", os.Getenv("DB_USERNAME"), os.Getenv("DB_PASSWORD"), os.Getenv("DB_HOST"), os.Getenv("DB_PORT"), os.Getenv("DB_DATABASE"))
+    }
+
+    return &DBConfig{
+        Driver: os.Getenv("DB_DRIVER"),
+        DSN: dsn,
+        TestMode: testMode,
+    }, nil
+}
+
+func Init(config *DBConfig) {
+	conn, err := sql.Open(config.Driver, config.DSN)
 
 	if err != nil {
 		fmt.Printf("Error creating connection: %v\n", err)
@@ -38,29 +71,16 @@ func Init() {
 }
 
 func DB() *sql.DB {
+    // initalize once singilton
 	if DBConnection == nil {
-		Init()
+        config, err := LoadConfig(false)
+        if err != nil {
+            fmt.Printf("Error loading config: %v\n", err)
+            return nil
+        }
+
+        Init(config)
 	}
 
 	return DBConnection
-}
-
-func Migrate() error {
-	driver, err := mysql.WithInstance(DB(), &mysql.Config{})
-
-	if err != nil {
-		fmt.Printf("Error creating migrations: %v\n", err)
-		return err
-	}
-
-	m, err := migrate.NewWithDatabaseInstance(
-		"file://database/migrations/",
-		"mysql", driver)
-
-	if err != nil {
-		fmt.Printf("Error : %v\n", err)
-		return err
-	}
-
-	return m.Steps(1)
 }
