@@ -1,18 +1,19 @@
 services:
-  app:
+  goapp:
     build:
       context: .
-      dockerfile: Dockerfile.prd
+      dockerfile: Dockerfile
     ports:
-      - "8080:8080"
-    restart: unless-stopped
+      - "${APP_PORT:-8080}:8000"
     depends_on: 
       - mysql_db
     environment:
-      DB_HOST: mysql_db
-      DB_PORT: 3306
-      DB_USERNAME: root
-      DB_PASSWORD: password
+      DB_HOST: ${DB_HOST:-mysql_db}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_USERNAME: ${DB_USERNAME:-root}
+      DB_PASSWORD: ${DB_PASSWORD:-password}
+    volumes:
+      - .:/app
     networks:
       - backend
 
@@ -22,9 +23,9 @@ services:
     ports:
       - "3306:3306"
     volumes:
-      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./internal/db/init.sql:/docker-entrypoint-initdb.d/init.sql
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-password}
       MYSQL_ALLOW_EMPTY_PASSWORD: false
     networks:
       - backend
