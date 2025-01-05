@@ -19,6 +19,7 @@
 vendor/
 tmp/
 .idea/
+bin/
 
 # Go workspace file
 go.work
