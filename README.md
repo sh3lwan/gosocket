@@ -83,7 +83,11 @@ Run unit tests using:
 ```bash
 go test ./...
 ```
-
+Update a `.env.test` file in the project root with the following variables:
+```env
+DB_DSN=:memory:
+DB_DRIVER=sqlite3
+```
 ---
 
 ## Contributing
