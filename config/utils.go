@@ -25,7 +25,7 @@ func EnableCors(w *http.ResponseWriter) {
 
 var DBConnection *sql.DB = nil
 
-func getEnv(key string) string {
+func GetEnv(key string) string {
 	err := godotenv.Load()
 
 	if err != nil {
@@ -36,11 +36,11 @@ func getEnv(key string) string {
 }
 
 func Init() {
-	username := getEnv("DB_USERNAME")
-	password := getEnv("DB_PASSWORD")
-	host := getEnv("DB_HOST")
-	port := getEnv("DB_PORT")
-	database := getEnv("DB_DATABASE")
+	username := GetEnv("DB_USERNAME")
+	password := GetEnv("DB_PASSWORD")
+	host := GetEnv("DB_HOST")
+	port := GetEnv("DB_PORT")
+	database := GetEnv("DB_DATABASE")
 
 	//fmt.Printf("%s:%s@tcp(%s:%s)/%s", username, password, host, port, database)
 

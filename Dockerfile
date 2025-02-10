@@ -1,4 +1,4 @@
-FROM golang:latest
+FROM golang:1.23
 
 # Download mysql-client & migrate go library
 RUN curl -s https://packagecloud.io/install/repositories/golang-migrate/migrate/script.deb.sh | bash && apt-get update && apt-get install -y default-mysql-client && apt-get install -y migrate && rm -rf /var/lib/apt/lists/*

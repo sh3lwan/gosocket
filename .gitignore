@@ -7,7 +7,6 @@
 *.dll
 *.so
 *.dylib
-.env
 
 # Test binary, built with `go test -c`
 *.test
@@ -22,3 +21,4 @@ tmp/
 # Go workspace file
 go.work
 .vercel
+.env
